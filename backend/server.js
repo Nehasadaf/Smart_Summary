@@ -3,10 +3,30 @@ const bodyParser = require("body-parser");
 const { spawn } = require("child_process");
 const path = require("path");
 const dotenv = require("dotenv");
+const mongoose = require("mongoose");
 
 dotenv.config();
 
-console.log(process.env);
+// MongoDB connection
+mongoose.connect(process.env.MONGODB_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log("✅ MongoDB connected"))
+.catch(err => console.error("❌ MongoDB connection error:", err));
+
+// MongoDB schema & model
+const summarySchema = new mongoose.Schema({
+  inputText: String,
+  summaryText: String,
+  createdAt: {
+    type: Date,
+    default: Date.now
+  }
+});
+const Summary = mongoose.model("Summary", summarySchema);
+
+// Express app setup
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -21,6 +41,7 @@ app.post("/api/summarize", (req, res) => {
   });
 
   let summary = "";
+
   python.stdout.on("data", (data) => {
     summary += data.toString();
   });
@@ -29,9 +50,24 @@ app.post("/api/summarize", (req, res) => {
     console.error(`stderr: ${data}`);
   });
 
-  python.on("close", (code) => {
+  python.on("close", async (code) => {
     if (code === 0) {
-      res.json({ summary: summary.trim() });
+      const trimmedSummary = summary.trim();
+
+      // Save to MongoDB
+      try {
+        const newSummary = new Summary({
+          inputText: text,
+          summaryText: trimmedSummary
+        });
+        await newSummary.save();
+        console.log("✅ Summary saved to DB");
+        res.json({ summary: trimmedSummary });
+      } catch (error) {
+        console.error("❌ DB Save Error:", error);
+        res.status(500).json({ error: "Failed to save summary to database." });
+      }
+
     } else {
       res.status(500).json({ error: "Summarization failed." });
     }
@@ -39,5 +75,5 @@ app.post("/api/summarize", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });
