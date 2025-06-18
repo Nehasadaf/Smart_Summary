@@ -33,6 +33,7 @@ const PORT = process.env.PORT || 3000;
 app.use(bodyParser.json());
 app.use(express.static(path.join(__dirname, "../public")));
 
+// Route: Summarize using Python
 app.post("/api/summarize", (req, res) => {
   const text = req.body.text;
 
@@ -54,14 +55,15 @@ app.post("/api/summarize", (req, res) => {
     if (code === 0) {
       const trimmedSummary = summary.trim();
 
-      // Save to MongoDB
       try {
         const newSummary = new Summary({
           inputText: text,
           summaryText: trimmedSummary
         });
+
         await newSummary.save();
         console.log("✅ Summary saved to DB");
+
         res.json({ summary: trimmedSummary });
       } catch (error) {
         console.error("❌ DB Save Error:", error);
@@ -73,6 +75,32 @@ app.post("/api/summarize", (req, res) => {
     }
   });
 });
+
+// Route: Get all saved summaries
+app.get("/api/summaries", async (req, res) => {
+  try {
+    const summaries = await Summary.find().sort({ createdAt: -1 });
+    res.json(summaries);
+  } catch (err) {
+    console.error("❌ Fetch Error:", err);
+    res.status(500).json({ error: "Failed to fetch summaries." });
+  }
+});
+
+// Route: Helper Bot Question Handler
+app.post("/api/ask", (req, res) => {
+  const { question } = req.body;
+
+  const responses = {
+    "what should we paste": "Paste your long notes or any paragraph you want summarized.",
+    "how to use this tool": "Type or paste your notes and click 'Summarize' to get an AI-generated summary.",
+    "how to save summary": "You can integrate MongoDB to save and manage summaries.",
+  };
+
+  const answer = responses[question.toLowerCase()] || "🤖 Sorry, I don't know that yet. Try asking something else!";
+  res.json({ answer });
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
